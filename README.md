@@ -29,3 +29,6 @@ driver will begin to output messages on the topics.
 ## Topics
 * **/gps/fix [NavSatFix]** : Status, position, and covariance data
 * **/gps/heading [Float64]** : Heading in degrees from True North
+
+## License
+Copyright (c) 2019 Jeremy Mallette under MIT License
