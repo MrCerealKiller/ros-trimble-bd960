@@ -2,7 +2,7 @@ import rospy
 import serial
 import time
 
-from std_msgs.msg import Float64
+from std_msgs.msg import Header, Float64
 from sensor_msgs.msg import NavSatFix, NavSatStatus
 
 
@@ -73,7 +73,7 @@ class TrimbleBD960(object):
         elif tag == self.HDT_TAG:
             self.decode_hdt(sentence)
         else:
-            rospy.logwarn('Warning [TrimbleBD960.decode]: Sentence type not recognized: ' + tag)
+            rospy.logwarn('Warning [TrimbleBD960.decode]: Sentence type not recognized')
 
     def decode_gga(self, sentence):
         self.lat = float(sentence[2])
@@ -104,12 +104,24 @@ class TrimbleBD960(object):
             self.heading = float(sentence[1])
 
     def publish(self):
-        print('----')
-        print('Lattitude: {}'.format(self.lat))
-        print('Longitude: {}'.format(self.long))
-        print('Altitude: {} m'.format(self.alt))
-        print('Heading: {}'.format(self.heading))
-        print('Fix: {}'.format(self.FIX_STATUS_DICT[self.fixStatus]))
+        header = Header()
+        header.stamp = rospy.Time.now()
+
+        navStatus = NavSatStatus()
+        navStatus.status = (self.fixStatus - 1)
+        navStatus.service = (0b1111)
+
+        gpsMsg = NavSatFix()
+        gpsMsg.header = header
+        gpsMsg.status = navStatus
+        gpsMsg.latitude = self.lat
+        gpsMsg.longitude = self.long
+        gpsMsg.altitude = self.alt
+        gpsMsg.position_covariance = self.covariance
+        gpsMsg.position_covariance_type = self.covariance_type
+
+        self.navSatPub.publish(gpsMsg)
+        self.headingPub.publish(self.heading)
 
     def nmea_stream(self):
         self._preempted = False
