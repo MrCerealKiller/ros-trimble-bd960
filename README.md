@@ -25,5 +25,7 @@ configuration utilities. (Ensure that the sentences you enable are supported.)
 timeout. Your timeout should correspond roughly to the configured frequency.
 3. Launch the node using `roslaunch ros_trimble_bd960 gps.launch` and the
 driver will begin to output messages on the topics.
-  * **/gps/fix [NavSatFix]** : Status, position, and covariance data
-  * **/gps/heading [Float64]** : Heading in degrees from True North
+
+## Topics
+* **/gps/fix [NavSatFix]** : Status, position, and covariance data
+* **/gps/heading [Float64]** : Heading in degrees from True North
