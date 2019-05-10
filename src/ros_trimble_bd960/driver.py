@@ -8,10 +8,9 @@ from sensor_msgs.msg import NavSatFix, NavSatStatus
 
 class TrimbleBD960(object):
 
-    BEGIN = '$'
-    GGA_TAG = 'GPGGA'
-    GST_TAG = 'GPGST'
-    HDT_TAG = 'GPHDT'
+    GGA_TAG = '$GPGGA'
+    GST_TAG = '$GPGST'
+    HDT_TAG = '$GPHDT'
 
     FIX_STATUS_DICT = {0: 'Fix not valid',
                        1: 'Valid GPS fix',
@@ -21,6 +20,7 @@ class TrimbleBD960(object):
     def __init__(self, port, baudrate, timeout):
         self._preempted = False
         self._ser = serial.Serial(port, baudrate, timeout=timeout)
+        rospy.loginfo('Connecting to port: ' + port)
 
         self.lat = 0
         self.long = 0
@@ -30,8 +30,8 @@ class TrimbleBD960(object):
         self.covariance_type = 2
         self.fixStatus = 0
 
-        self.navSatPub = rospy.publisher('~fix', NavSatFix, queue_size=1)
-        self.headingPub = rospy.publisher('~heading', Float64, queue_size=1)
+        self.navSatPub = rospy.Publisher('~fix', NavSatFix, queue_size=1)
+        self.headingPub = rospy.Publisher('~heading', Float64, queue_size=1)
 
     def __enter__(self):
         self.open()
@@ -58,12 +58,7 @@ class TrimbleBD960(object):
         self._ser.send_break()
 
     def read_sentence(self):
-        while not self._ser.read(1) == chr(self.BEGIN):
-            rospy.loginfo_throttle(2.0, 'Waiting for beginning of sentence')
-            if rospy.is_shutdown():
-                break
-
-        response = self.readline()              # Get sentence
+        response = self.readline()              # Get raw sentence
         response = response.strip().split('*')  # Split at checksum
         sentence = response[0].split(',')       # Split data
         if sentence:
@@ -78,7 +73,7 @@ class TrimbleBD960(object):
         elif tag == self.HDT_TAG:
             self.decode_hdt(sentence)
         else:
-            rospy.logwarn('Warning [TrimbleBD960.decode]: Sentence type not recognized')
+            rospy.logwarn('Warning [TrimbleBD960.decode]: Sentence type not recognized: ' + tag)
 
     def decode_gga(self, sentence):
         self.lat = float(sentence[2])
@@ -114,7 +109,7 @@ class TrimbleBD960(object):
         print('Longitude: {}'.format(self.long))
         print('Altitude: {} m'.format(self.alt))
         print('Heading: {}'.format(self.heading))
-        print('Fix: {}'.format(self.fix_status_dict[self.fix_status]))
+        print('Fix: {}'.format(self.FIX_STATUS_DICT[self.fixStatus]))
 
     def nmea_stream(self):
         self._preempted = False

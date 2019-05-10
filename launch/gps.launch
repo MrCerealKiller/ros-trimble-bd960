@@ -1,8 +1,8 @@
 <launch>
   <node name="gps"
-        pkg="ros-trimble-bd960"
-        type="gps"
+        pkg="ros_trimble_bd960"
+        type="gps.py"
         output="screen">
-    <rosparam command="load" file="$(find ros-trimble-bd960)/config/gps.yaml" />
+    <rosparam command="load" file="$(find ros_trimble_bd960)/config/gps.yaml" />
   </node>
-<launch>
+</launch>
