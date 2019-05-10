@@ -1,21 +1,26 @@
-#!/usr/bin/env python
-
+import rospy
 import serial
 import time
 
+from std_msgs.msg import Float64
+from sensor_msgs.msg import NavSatFix, NavSatStatus
+
+
 class TrimbleBD960(object):
-    def __init__(self, port='/dev/ttyUSB0', baudrate=38400, timeout=1):
+
+    BEGIN = '$'
+    GGA_TAG = 'GPGGA'
+    GST_TAG = 'GPGST'
+    HDT_TAG = 'GPHDT'
+
+    FIX_STATUS_DICT = {0: 'Fix not valid',
+                       1: 'Valid GPS fix',
+                       2: 'Valid DGPS fix'
+    }
+
+    def __init__(self, port, baudrate, timeout):
         self._preempted = False
         self._ser = serial.Serial(port, baudrate, timeout=timeout)
-
-        self.GGA_TAG = '$GPGGA'
-        self.GST_TAG = '$GPGST'
-        self.HDT_TAG = '$GPHDT'
-
-        self.fix_status_dict = {0: 'Fix not valid',
-                                1: 'Valid GPS fix',
-                                2: 'Valid DGPS fix'
-        }
 
         self.lat = 0
         self.long = 0
@@ -23,7 +28,10 @@ class TrimbleBD960(object):
         self.heading = 0
         self.covariance = 0
         self.covariance_type = 2
-        self.fix_status = 0
+        self.fixStatus = 0
+
+        self.navSatPub = rospy.publisher('~fix', NavSatFix, queue_size=1)
+        self.headingPub = rospy.publisher('~heading', Float64, queue_size=1)
 
     def __enter__(self):
         self.open()
@@ -50,11 +58,27 @@ class TrimbleBD960(object):
         self._ser.send_break()
 
     def read_sentence(self):
-        response = self.readline().strip().split('*')
-        sentence = response[0].split(',')
+        while not self._ser.read(1) == chr(self.BEGIN):
+            rospy.loginfo_throttle(2.0, 'Waiting for beginning of sentence')
+            if rospy.is_shutdown():
+                break
+
+        response = self.readline()              # Get sentence
+        response = response.strip().split('*')  # Split at checksum
+        sentence = response[0].split(',')       # Split data
         if sentence:
             self.decode(sentence)
-            self.publish()
+
+    def decode(self, sentence):
+        tag = sentence[0]
+        if tag == self.GGA_TAG:
+            self.decode_gga(sentence)
+        elif tag == self.GST_TAG:
+            self.decode_gst(sentence)
+        elif tag == self.HDT_TAG:
+            self.decode_hdt(sentence)
+        else:
+            rospy.logwarn('Warning [TrimbleBD960.decode]: Sentence type not recognized')
 
     def decode_gga(self, sentence):
         self.lat = float(sentence[2])
@@ -66,13 +90,16 @@ class TrimbleBD960(object):
             self.long = (self.long * -1.0)
 
         self.alt = float(sentence[9])
-        self.fix_status = int(sentence[6])
+        self.fixStatus = int(sentence[6])
 
     def decode_gst(self, sentence):
+        # Covariance matrix diagonal values are the squares
+        # of the individual standard deviations
         lat_covariance = (float(sentence[6]) * float(sentence[6]))
         long_covariance = (float(sentence[7]) * float(sentence[7]))
         alt_covariance = (float(sentence[8]) * float(sentence[8]))
 
+        # Covariance Matrix
         self.covariance = [lat_covariance, 0.0, 0.0,
                            0.0, long_covariance, 0.0,
                            0.0, 0.0, alt_covariance]
@@ -80,17 +107,6 @@ class TrimbleBD960(object):
     def decode_hdt(self, sentence):
         if sentence[1]:
             self.heading = float(sentence[1])
-
-    def decode(self, sentence):
-        tag = sentence[0]
-        if tag == self.GGA_TAG:
-            self.decode_gga(sentence)
-        elif tag == self.GST_TAG:
-            self.decode_gst(sentence)
-        elif tag == self.HDT_TAG:
-            self.decode_hdt(sentence)
-        else:
-            print('Error: Sentence code not recognized')
 
     def publish(self):
         print('----')
@@ -106,11 +122,13 @@ class TrimbleBD960(object):
         self._ser.flush()
 
         while not self._preempted:
+            if rospy.is_shutdown():
+                self.preempt()
+                return
+
             try:
                 self.read_sentence()
+                self.publish()
             except Exception as e:
-                print('Error: ', str(e))
-
-if __name__ == "__main__":
-    gps = TrimbleBD960()
-    gps.nmea_stream()
+                rospy.logerr_throttle(1.0, 'Error [TrimbleBD960.nmea_stream]: ' + str(e))
+                continue

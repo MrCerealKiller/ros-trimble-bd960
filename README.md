@@ -11,10 +11,12 @@ Currently supported NMEA sentence types are:
 * GGA
 * GST
 * HDT
+
 _Support for more sentences may be added in the future_
 
 ## Dependencies
-//TODO
+* ROS
+* PySerial (Python Serial)
 
 ## Usage
 //TODO
